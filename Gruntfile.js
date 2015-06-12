@@ -139,8 +139,8 @@ module.exports = function(grunt) {
   function buildWebAnimations1(target) {
     var config = targetConfig[target];
     return genTarget(target).concat([
-      concat(config.scopeSrc.concat(config.sharedSrc).concat(config.webAnimations1Src), 'inter-raw-' + target + '.js', concatDefines),
-      guard('inter-raw-' + target + '.js', target + '.js'),
+      concat(config.scopeSrc.concat(config.sharedSrc).concat(config.webAnimations1Src), target + '.unguarded.js', concatDefines),
+      guard(target + '.unguarded.js', target + '.js'),
       compress(target + '.js', target + '.min.js', concatDefines)
     ]);
   }
@@ -154,7 +154,9 @@ module.exports = function(grunt) {
       concat(config.webAnimationsNextSrc, 'inter-component-' + target + '.js', concatDefines),
       concatWithMaps(['inter-' + target + '-preamble.js', 'inter-guarded-' + target + '-web-animations-1.js', 'inter-component-' + target + '.js'],
           target + '.js'),
-      compress(target + '.js', target + '.min.js', concatDefines)
+      compress(target + '.js', target + '.min.js', concatDefines),
+      concatWithMaps(['inter-' + target + '-preamble.js', 'inter-component-' + target + 'web-animations-1.js', 'inter-component-' + target + '.js'],
+          target + '.unguarded.js'),
     ]);
   }
 
