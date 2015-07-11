@@ -21,18 +21,87 @@ if (!false) {
     }
     return clone;
   }
-  function makeTiming(timingInput, forGroup) {
-    var timing = {
-      delay: 0,
-      endDelay: 0,
-      fill: forGroup ? "both" : "none",
-      iterationStart: 0,
-      iterations: 1,
-      duration: forGroup ? "auto" : 0,
-      playbackRate: 1,
-      direction: "normal",
-      easing: "linear"
-    };
+  function AnimationEffectTiming() {
+    this._delay = 0;
+    this._endDelay = 0;
+    this._fill = "none";
+    this._iterationStart = 0;
+    this._iterations = 1;
+    this._duration = 0;
+    this._playbackRate = 1;
+    this._direction = "normal";
+    this._easing = "linear";
+  }
+  AnimationEffectTiming.prototype = {
+    _setMember: function(member, value) {
+      this["_" + member] = value;
+      if (this._effect) {
+        this._effect._timingInput[member] = value;
+        this._effect._timing = shared.normalizeTimingInput(shared.normalizeTimingInput(this._effect._timingInput));
+        this._effect.activeDuration = shared.calculateActiveDuration(this._effect._timing);
+        if (this._effect._animation) {
+          this._effect._animation._rebuildUnderlyingAnimation();
+        }
+      }
+    },
+    get playbackRate() {
+      return this._playbackRate;
+    },
+    set delay(value) {
+      this._setMember("delay", value);
+    },
+    get delay() {
+      return this._delay;
+    },
+    set endDelay(value) {
+      this._setMember("endDelay", value);
+    },
+    get endDelay() {
+      return this._endDelay;
+    },
+    set fill(value) {
+      this._setMember("fill", value);
+    },
+    get fill() {
+      return this._fill;
+    },
+    set iterationStart(value) {
+      this._setMember("iterationStart", value);
+    },
+    get iterationStart() {
+      return this._iterationStart;
+    },
+    set duration(value) {
+      this._setMember("duration", value);
+    },
+    get duration() {
+      return this._duration;
+    },
+    set direction(value) {
+      this._setMember("direction", value);
+    },
+    get direction() {
+      return this._direction;
+    },
+    set easing(value) {
+      this._setMember("easing", value);
+    },
+    get easing() {
+      return this._easing;
+    },
+    set iterations(value) {
+      this._setMember("iterations", value);
+    },
+    get iterations() {
+      return this._iterations;
+    }
+  };
+  function makeTiming(timingInput, forGroup, effect) {
+    var timing = new AnimationEffectTiming();
+    if (forGroup) {
+      timing.fill = "both";
+      timing.duration = "auto";
+    }
     if ("number" == typeof timingInput && !isNaN(timingInput)) {
       timing.duration = timingInput;
     } else {
@@ -60,9 +129,24 @@ if (!false) {
     }
     return timing;
   }
+  function numericTimingToObject(timingInput) {
+    if ("number" == typeof timingInput) {
+      if (isNaN(timingInput)) {
+        timingInput = {
+          duration: 0
+        };
+      } else {
+        timingInput = {
+          duration: timingInput
+        };
+      }
+    }
+    return timingInput;
+  }
   function normalizeTimingInput(timingInput, forGroup) {
+    timingInput = shared.numericTimingToObject(timingInput);
     var timing = makeTiming(timingInput, forGroup);
-    timing.easing = toTimingFunction(timing.easing);
+    timing._easing = toTimingFunction(timing.easing);
     return timing;
   }
   function cubic(a, b, c, d) {
@@ -223,6 +307,7 @@ if (!false) {
   }
   shared.cloneTimingInput = cloneTimingInput;
   shared.makeTiming = makeTiming;
+  shared.numericTimingToObject = numericTimingToObject;
   shared.normalizeTimingInput = normalizeTimingInput;
   shared.calculateActiveDuration = calculateActiveDuration;
   shared.calculateTimeFraction = calculateTimeFraction;
@@ -1494,7 +1579,7 @@ if (!false) {
     });
     var taggedUnitRegExp = "U(" + unitRegExp.source + ")";
     var typeCheck = string.replace(/[-+]?(\d*\.)?\d+/g, "N").replace(new RegExp("N" + taggedUnitRegExp, "g"), "D").replace(/\s[+-]\s/g, "O").replace(/\s/g, "");
-    var reductions = [ /N\*(D)/g, /(N|D)[*/]N/g, /(N|D)O\1/g, /\((N|D)\)/g ];
+    var reductions = [ /N\*(D)/g, /(N|D)[*\/]N/g, /(N|D)O\1/g, /\((N|D)\)/g ];
     var i = 0;
     while (i < reductions.length) {
       if (reductions[i].test(typeCheck)) {
@@ -1897,10 +1982,6 @@ if (!false) {
       this._discardAnimations();
       return this._animations.slice();
     },
-    getAnimationPlayers: function() {
-      shared.deprecated("AnimationTimeline.getAnimationPlayers", "2015-03-23", "Use AnimationTimeline.getAnimations instead.");
-      return this.getAnimations();
-    },
     _updateAnimationsPromises: function() {
       scope.animationsWithPromises = scope.animationsWithPromises.filter(function(animation) {
         return animation._updatePromises();
@@ -1913,7 +1994,7 @@ if (!false) {
       });
     },
     _play: function(effect) {
-      var animation = new scope.Animation(effect);
+      var animation = new scope.Animation(effect, this);
       this._animations.push(animation);
       scope.restartWebAnimationsNextTick();
       animation._updatePromises();
@@ -1962,11 +2043,15 @@ if (!false) {
 
 (function(shared, scope, testing) {
   scope.animationsWithPromises = [];
-  scope.Animation = function(effect) {
+  scope.Animation = function(effect, timeline) {
     this.effect = effect;
     if (effect) {
       effect._animation = this;
     }
+    if (!timeline) {
+      throw new Error("Animation with null timeline is not supported");
+    }
+    this._timeline = timeline;
     this._sequenceNumber = shared.sequenceNumber++;
     this._holdTime = 0;
     this._paused = false;
@@ -2038,6 +2123,9 @@ if (!false) {
         this._animation = scope.newUnderlyingAnimationForGroup(this.effect);
         scope.bindAnimationForGroup(this);
       }
+      if (this.effect && this.effect._onsample) {
+        scope.bindAnimationForCustomEffect(this);
+      }
       if (hadUnderlying) {
         if (1 != oldPlaybackRate) {
           this.playbackRate = oldPlaybackRate;
@@ -2108,6 +2196,9 @@ if (!false) {
           childAnimation.startTime = this.startTime + offset / this.playbackRate;
         }
       }
+    },
+    get timeline() {
+      return this._timeline;
     },
     get playState() {
       return this._animation ? this._animation.playState : "idle";
@@ -2224,16 +2315,12 @@ if (!false) {
       }
       this._updatePromises();
     },
-    get source() {
-      shared.deprecated("Animation.source", "2015-03-23", "Use Animation.effect instead.");
-      return this.effect;
-    },
     play: function() {
       this._updatePromises();
       this._paused = false;
       this._animation.play();
-      if (document.timeline._animations.indexOf(this) == -1) {
-        document.timeline._animations.push(this);
+      if (this._timeline._animations.indexOf(this) == -1) {
+        this._timeline._animations.push(this);
       }
       this._register();
       scope.awaitStartTime(this);
@@ -2325,6 +2412,7 @@ if (!false) {
       }
     }
   };
+  window.Animation = scope.Animation;
   if (false) {
     testing.webAnimationsNextAnimation = scope.Animation;
   }
@@ -2371,10 +2459,14 @@ if (!false) {
   }
   scope.KeyframeEffect = function(target, effectInput, timingInput) {
     this.target = target;
+    this._parent = null;
+    timingInput = shared.numericTimingToObject(timingInput);
     this._timingInput = shared.cloneTimingInput(timingInput);
     this._timing = shared.normalizeTimingInput(timingInput);
-    this.timing = shared.makeTiming(timingInput);
+    this.timing = shared.makeTiming(timingInput, false, this);
+    this.timing._effect = this;
     if ("function" == typeof effectInput) {
+      shared.deprecated("Custom KeyframeEffect", "2015-06-22", "Use KeyframeEffect.onsample instead.");
       this._normalizedKeyframes = effectInput;
     } else {
       this._normalizedKeyframes = new KeyframeList(effectInput);
@@ -2390,9 +2482,17 @@ if (!false) {
       }
       return this._normalizedKeyframes._frames;
     },
-    get effect() {
-      shared.deprecated("KeyframeEffect.effect", "2015-03-23", "Use KeyframeEffect.getFrames() instead.");
-      return this._normalizedKeyframes;
+    set onsample(callback) {
+      if ("function" == typeof this.getFrames()) {
+        throw new Error("Setting onsample on custom effect KeyframeEffect is not supported.");
+      }
+      this._onsample = callback;
+      if (this._animation) {
+        this._animation._rebuildUnderlyingAnimation();
+      }
+    },
+    get parent() {
+      return this._parent;
     },
     clone: function() {
       if ("function" == typeof this.getFrames()) {
@@ -2471,16 +2571,6 @@ if (!false) {
       return null !== animation.effect && animation.effect.target == this;
     }.bind(this));
   };
-  window.Element.prototype.getAnimationPlayers = function() {
-    shared.deprecated("Element.getAnimationPlayers", "2015-03-23", "Use Element.getAnimations instead.");
-    return this.getAnimations();
-  };
-  window.Animation = function() {
-    shared.deprecated("window.Animation", "2015-03-23", "Use window.KeyframeEffect instead.");
-    window.KeyframeEffect.apply(this, arguments);
-  };
-  window.Animation.prototype = Object.create(window.KeyframeEffect.prototype);
-  window.Animation.prototype.constructor = window.Animation;
 })(webAnimationsShared, webAnimationsNext, webAnimationsTesting);
 
 (function(shared, scope, testing) {
@@ -2488,7 +2578,13 @@ if (!false) {
   var sequenceNumber = 0;
   scope.bindAnimationForCustomEffect = function(animation) {
     var target = animation.effect.target;
-    var effectFunction = animation.effect._normalizedKeyframes;
+    var effectFunction;
+    var isKeyframeEffect = "function" == typeof animation.effect.getFrames();
+    if (isKeyframeEffect) {
+      effectFunction = animation.effect.getFrames();
+    } else {
+      effectFunction = animation.effect._onsample;
+    }
     var timing = animation.effect.timing;
     var last = null;
     timing = shared.normalizeTimingInput(timing);
@@ -2501,7 +2597,11 @@ if (!false) {
         }
       }
       if (t !== last) {
-        effectFunction(t, target, animation.effect);
+        if (isKeyframeEffect) {
+          effectFunction(t, target, animation.effect);
+        } else {
+          effectFunction(t, animation.effect, animation.effect._animation);
+        }
       }
       last = t;
     };
@@ -2561,9 +2661,11 @@ if (!false) {
     this._parent = null;
     this.children = children || [];
     this._reparent(this.children);
+    timingInput = shared.numericTimingToObject(timingInput);
     this._timingInput = shared.cloneTimingInput(timingInput);
     this._timing = shared.normalizeTimingInput(timingInput, true);
-    this.timing = shared.makeTiming(timingInput, true);
+    this.timing = shared.makeTiming(timingInput, true, this);
+    this.timing._effect = this;
     if ("auto" === this._timing.duration) {
       this._timing.duration = this.activeDuration;
     }
@@ -2626,6 +2728,9 @@ if (!false) {
     },
     prepend: function() {
       this._putChild(arguments, false);
+    },
+    get parent() {
+      return this._parent;
     },
     get firstChild() {
       return this.children.length ? this.children[0] : null;
@@ -2697,7 +2802,9 @@ if (!false) {
         }
       }
     };
-    underlyingAnimation = scope.timeline._play(new scope.KeyframeEffect(null, ticker, group._timing));
+    var underlyingEffect = new KeyframeEffect(null, [], group._timing);
+    underlyingEffect.onsample = ticker;
+    underlyingAnimation = scope.timeline._play(underlyingEffect);
     return underlyingAnimation;
   };
   scope.bindAnimationForGroup = function(animation) {
@@ -2708,17 +2815,5 @@ if (!false) {
     animation._setExternalAnimation(animation);
   };
   scope.groupChildDuration = groupChildDuration;
-  window.AnimationSequence = function() {
-    shared.deprecated("window.AnimationSequence", "2015-03-23", "Use window.SequenceEffect instead.");
-    window.SequenceEffect.apply(this, arguments);
-  };
-  window.AnimationSequence.prototype = Object.create(window.SequenceEffect.prototype);
-  window.AnimationSequence.prototype.constructor = window.AnimationSequence;
-  window.AnimationGroup = function() {
-    shared.deprecated("window.AnimationGroup", "2015-03-23", "Use window.GroupEffect instead.");
-    window.GroupEffect.apply(this, arguments);
-  };
-  window.AnimationGroup.prototype = Object.create(window.GroupEffect.prototype);
-  window.AnimationGroup.prototype.constructor = window.AnimationGroup;
 })(webAnimationsShared, webAnimationsNext, webAnimationsTesting);
 //# sourceMappingURL=inter-component-web-animations-next-lite.js.map
