@@ -13,6 +13,33 @@
 // limitations under the License.
 
 (function(shared, scope, testing) {
+
+  function flattenTiming(child, parent) {
+    switch (parent._timing._direction) {
+      case 'reverse':
+        switch (child._timing._direction) {
+          case 'normal':
+            child._timing._direction = 'reverse';
+            child._timingInput._direction = 'reverse';
+            switch (child._timing._fill) {
+              case 'none':
+                child._timing._fill = 'backwards';
+                child._timingInput._fill = 'backwards';
+                break;
+              case 'forwards':
+                child._timing._fill = 'both';
+                child._timingInput._fill = 'both';
+                break;
+            }
+            break;
+          case 'reverse':
+            child._timing._direction = 'normal';
+            child._timingInput._direction = 'normal';
+            break;
+        }
+    }
+  }
+
   scope.animationsWithPromises = [];
 
   scope.Animation = function(effect, timeline) {
@@ -132,21 +159,28 @@
     _constructChildAnimations: function() {
       if (!this.effect || !this._isGroup)
         return;
-      var offset = this.effect._timing.delay;
+
       this._removeChildAnimations();
-      this.effect.children.forEach(function(child) {
+      var children = this.effect.children;
+      if (this.effect._timing.direction == 'reverse') {
+        children = children.slice(0).reverse();
+      }
+      children.forEach(function(child) {
+        var oldTiming = child._timing;
+        flattenTiming(child, this.effect);
         var childAnimation = window.document.timeline._play(child);
+        child._timing = oldTiming;
+
         this._childAnimations.push(childAnimation);
         childAnimation.playbackRate = this.playbackRate;
         if (this._paused)
           childAnimation.pause();
         child._animation = this.effect._animation;
-
-        this._arrangeChildren(childAnimation, offset);
-
-        if (this.effect instanceof window.SequenceEffect)
-          offset += scope.groupChildDuration(child);
       }.bind(this));
+
+      if (!this.effect._parent) {
+        this._updateChildren();
+      }
     },
     _arrangeChildren: function(childAnimation, offset) {
       if (this.startTime === null) {
