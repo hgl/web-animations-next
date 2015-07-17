@@ -142,7 +142,12 @@
         return;
 
       var offset = this.effect._timing.delay;
-      this._childAnimations.forEach(function(childAnimation) {
+      var reverse = this.effect._timing.direction == 'reverse';
+      this._childAnimations.forEach(function(childAnimation, i) {
+        if (reverse) {
+          var len = this._childAnimations.length;
+          childAnimation = this._childAnimations[len - 1 - i];
+        }
         this._arrangeChildren(childAnimation, offset);
         if (this.effect instanceof window.SequenceEffect)
           offset += scope.groupChildDuration(childAnimation.effect);
@@ -161,11 +166,7 @@
         return;
 
       this._removeChildAnimations();
-      var children = this.effect.children;
-      if (this.effect._timing.direction == 'reverse') {
-        children = children.slice(0).reverse();
-      }
-      children.forEach(function(child) {
+      this.effect.children.forEach(function(child) {
         var oldTiming = child._timing;
         flattenTiming(child, this.effect);
         var childAnimation = window.document.timeline._play(child);
