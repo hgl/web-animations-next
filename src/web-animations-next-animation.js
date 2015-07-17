@@ -14,7 +14,7 @@
 
 (function(shared, scope, testing) {
 
-  function flattenTiming(child, parent) {
+  function flattenDirection(child, parent) {
     switch (parent._timing._direction) {
       case 'reverse':
         switch (child._timing._direction) {
@@ -167,10 +167,12 @@
 
       this._removeChildAnimations();
       this.effect.children.forEach(function(child) {
-        var oldTiming = child._timing;
-        flattenTiming(child, this.effect);
+        var origInputDirection = child._timingInput.direction;
+        var origDirection = child._timing.direction;
+        flattenDirection(child, this.effect);
         var childAnimation = window.document.timeline._play(child);
-        child._timing = oldTiming;
+        child._timingInput.direction = origInputDirection;
+        child._timing.direction = origDirection;
 
         this._childAnimations.push(childAnimation);
         childAnimation.playbackRate = this.playbackRate;
