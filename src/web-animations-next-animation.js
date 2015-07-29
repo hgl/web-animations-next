@@ -14,7 +14,7 @@
 
 (function(shared, scope, testing) {
 
-  function flattenDirection(child, parent) {
+  function flattenTiming(child, parent) {
     switch (parent._timing._direction) {
       case 'reverse':
         switch (child._timing._direction) {
@@ -28,6 +28,10 @@
             break;
         }
     }
+
+    var rate = parent._timing.playbackRate * child._timing.playbackRate;
+    child._timing.playbackRate = rate;
+    child._timingInput.playbackRate = rate;
   }
 
   scope.animationsWithPromises = [];
@@ -156,15 +160,16 @@
         children = children.slice(0).reverse();
       }
       children.forEach(function(child) {
-        var origInputDirection = child._timingInput.direction;
-        var origDirection = child._timing.direction;
-        flattenDirection(child, this.effect);
+        var origTimingInput = shared.cloneTimingInput(child._timingInput);
+        var origTiming = shared.cloneTimingInput(child._timing);
+        flattenTiming(child, this.effect);
         var childAnimation = window.document.timeline._play(child);
-        child._timingInput.direction = origInputDirection;
-        child._timing.direction = origDirection;
+        childAnimation.playbackRate = child._timing.playbackRate * this.playbackRate;
+        child._timingInput = origTimingInput;
+        child._timing = origTiming;
 
         this._childAnimations.push(childAnimation);
-        childAnimation.playbackRate = this.playbackRate;
+
         if (this._paused)
           childAnimation.pause();
         child._animation = this.effect._animation;

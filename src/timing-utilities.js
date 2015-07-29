@@ -55,6 +55,9 @@
     get playbackRate() {
       return this._playbackRate;
     },
+    set playbackRate(value) {
+      this._setMember('playbackRate', value);
+    },
     set delay(value) {
       this._setMember('delay', value);
     },
@@ -127,7 +130,7 @@
           if ((property == 'direction') && (directions.indexOf(timingInput[property]) == -1)) {
             return;
           }
-          if (property == 'playbackRate' && timingInput[property] !== 1 && shared.isDeprecated('AnimationEffectTiming.playbackRate', '2014-11-28', 'Use Animation.playbackRate instead.')) {
+          if (!forGroup && property == 'playbackRate' && timingInput[property] !== 1 && shared.isDeprecated('AnimationEffectTiming.playbackRate', '2014-11-28', 'Use Animation.playbackRate instead.')) {
             return;
           }
           timing[property] = timingInput[property];
